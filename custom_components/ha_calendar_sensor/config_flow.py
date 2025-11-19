@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 import voluptuous as vol
 
 from homeassistant import config_entries
@@ -20,7 +21,7 @@ class HaCalendarSensorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        errors = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             calendar_entity = user_input[CONF_CALENDAR_ENTITY]
