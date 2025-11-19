@@ -1,0 +1,10 @@
+{
+  "domain": "ha_calendar_sensor",
+  "name": "HA Calendar Sensor",
+  "version": "0.1.0",
+  "documentation": "https://github.com/reiniertc/ha-calendar-sensor",
+  "requirements": [],
+  "codeowners": ["@reiniertc"],
+  "integration_type": "helper",
+  "iot_class": "local_push"
+}
