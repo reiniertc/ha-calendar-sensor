@@ -50,14 +50,18 @@ class AgendaCoordinator(DataUpdateCoordinator[dict[int, list[AgendaEvent]]]):
         return self._max_events
 
     async def _async_update_data(self) -> dict[int, list[AgendaEvent]]:
-        tz = dt_util.get_default_time_zone()
-        today = dt_util.now(tz=tz).date()
+        """Fetch events per day and return as {day_index: [AgendaEvent,...]}."""
+        now = dt_util.now()
+        tz = now.tzinfo
+        today = now.date()
 
         results: dict[int, list[AgendaEvent]] = {}
 
         async with async_timeout.timeout(30):
             for index in range(self._days_ahead):
                 day = today + timedelta(days=index)
+
+                # Maak begin/eind van de dag in lokale tijd
                 start_dt = datetime.combine(day, datetime.min.time()).replace(tzinfo=tz)
                 end_dt = datetime.combine(day, datetime.max.time()).replace(tzinfo=tz)
 
