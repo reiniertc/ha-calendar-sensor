@@ -1,0 +1,9 @@
+DOMAIN = "ha_calendar_sensor"
+
+CONF_CALENDAR_ENTITY = "calendar_entity"
+CONF_DAYS_AHEAD = "days_ahead"
+CONF_MAX_EVENTS = "max_events"
+
+DEFAULT_DAYS_AHEAD = 2
+DEFAULT_MAX_EVENTS = 12
+UPDATE_INTERVAL_MINUTES = 15
