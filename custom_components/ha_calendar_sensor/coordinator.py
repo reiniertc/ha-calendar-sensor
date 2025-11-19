@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import logging
 
 import async_timeout
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -30,7 +33,7 @@ class AgendaCoordinator(DataUpdateCoordinator[dict[int, list[AgendaEvent]]]):
     ) -> None:
         super().__init__(
             hass=hass,
-            logger=None,
+            logger=_LOGGER,
             name=name,
             update_interval=update_interval,
         )
@@ -38,11 +41,19 @@ class AgendaCoordinator(DataUpdateCoordinator[dict[int, list[AgendaEvent]]]):
         self._days_ahead = days_ahead
         self._max_events = max_events
 
-    async def _async_update_data(self):
+    @property
+    def days_ahead(self) -> int:
+        return self._days_ahead
+
+    @property
+    def max_events(self) -> int:
+        return self._max_events
+
+    async def _async_update_data(self) -> dict[int, list[AgendaEvent]]:
         tz = dt_util.get_default_time_zone()
         today = dt_util.now(tz=tz).date()
 
-        results = {}
+        results: dict[int, list[AgendaEvent]] = {}
 
         async with async_timeout.timeout(30):
             for index in range(self._days_ahead):
@@ -62,17 +73,20 @@ class AgendaCoordinator(DataUpdateCoordinator[dict[int, list[AgendaEvent]]]):
                     return_response=True,
                 )
 
-                data = response.get(self._calendar_entity, {})
-                raw_events = data.get("events", [])
+                calendar_data = response.get(self._calendar_entity, {})
+                raw_events = calendar_data.get("events", [])
 
-                events = []
+                events: list[AgendaEvent] = []
                 for ev in raw_events[: self._max_events]:
-                    start = dt_util.parse_datetime(ev.get("start"))
-                    end = dt_util.parse_datetime(ev.get("end")) if ev.get("end") else None
-
+                    start = dt_util.parse_datetime(ev.get("start")) or start_dt
+                    end = (
+                        dt_util.parse_datetime(ev.get("end"))
+                        if ev.get("end")
+                        else None
+                    )
                     events.append(
                         AgendaEvent(
-                            start=start or start_dt,
+                            start=start,
                             end=end,
                             summary=ev.get("summary", ""),
                             description=ev.get("description"),
