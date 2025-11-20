@@ -1,6 +1,7 @@
+# coordinator.py
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Any
 from datetime import datetime, timedelta
 import logging
 
@@ -13,15 +14,9 @@ from homeassistant.util import dt as dt_util
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
-class AgendaEvent:
-    start: datetime
-    end: datetime | None
-    summary: str
-    description: str | None
+class AgendaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Coordinator die agenda-events ophaalt en vlakke data voor de sensor aanlevert."""
 
-
-class AgendaCoordinator(DataUpdateCoordinator[dict[int, list[AgendaEvent]]]):
     def __init__(
         self,
         hass: HomeAssistant,
@@ -49,19 +44,20 @@ class AgendaCoordinator(DataUpdateCoordinator[dict[int, list[AgendaEvent]]]):
     def max_events(self) -> int:
         return self._max_events
 
-    async def _async_update_data(self) -> dict[int, list[AgendaEvent]]:
-        """Fetch events per day and return as {day_index: [AgendaEvent,...]}."""
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Haal events op en flatten naar attribuut-structuur voor de sensor."""
+
         now = dt_util.now()
         tz = now.tzinfo
         today = now.date()
 
-        results: dict[int, list[AgendaEvent]] = {}
+        payload: dict[str, Any] = {}
+        total_today = 0
 
         async with async_timeout.timeout(30):
-            for index in range(self._days_ahead):
-                day = today + timedelta(days=index)
+            for day_index in range(self._days_ahead):
+                day = today + timedelta(days=day_index)
 
-                # Maak begin/eind van de dag in lokale tijd
                 start_dt = datetime.combine(day, datetime.min.time()).replace(tzinfo=tz)
                 end_dt = datetime.combine(day, datetime.max.time()).replace(tzinfo=tz)
 
@@ -80,23 +76,27 @@ class AgendaCoordinator(DataUpdateCoordinator[dict[int, list[AgendaEvent]]]):
                 calendar_data = response.get(self._calendar_entity, {})
                 raw_events = calendar_data.get("events", [])
 
-                events: list[AgendaEvent] = []
-                for ev in raw_events[: self._max_events]:
-                    start = dt_util.parse_datetime(ev.get("start")) or start_dt
-                    end = (
-                        dt_util.parse_datetime(ev.get("end"))
-                        if ev.get("end")
-                        else None
-                    )
-                    events.append(
-                        AgendaEvent(
-                            start=start,
-                            end=end,
-                            summary=ev.get("summary", ""),
-                            description=ev.get("description"),
-                        )
-                    )
+                events = raw_events[: self._max_events]
 
-                results[index] = events
+                if day_index == 0:
+                    total_today = len(events)
 
-        return results
+                for event_index, ev in enumerate(events):
+                    prefix = f"event_{day_index}_{event_index}"
+
+                    payload[f"{prefix}_start"] = ev.get("start", "")
+                    payload[f"{prefix}_end"] = ev.get("end", "")
+                    payload[f"{prefix}_summary"] = ev.get("summary", "")
+                    payload[f"{prefix}_description"] = ev.get("description", "")
+
+        payload["count_today"] = total_today
+        payload["last_refresh"] = dt_util.utcnow().isoformat()
+
+        _LOGGER.debug(
+            "AgendaCoordinator update %s: count_today=%s, keys=%s",
+            self._calendar_entity,
+            total_today,
+            list(payload.keys()),
+        )
+
+        return payload
