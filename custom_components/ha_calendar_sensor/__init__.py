@@ -7,12 +7,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
+from homeassistant.const import CONF_SCAN_INTERVAL
+
 from .const import (
-  DOMAIN,
-  UPDATE_INTERVAL_MINUTES,
-  CONF_CALENDAR_ENTITY,
-  CONF_DAYS_AHEAD,
-  CONF_MAX_EVENTS,
+    DOMAIN,
+    CONF_CALENDAR_ENTITY,
+    CONF_DAYS_AHEAD,
+    CONF_MAX_EVENTS,
+    DEFAULT_SCAN_INTERVAL,
 )
 from .coordinator import AgendaCoordinator
 
@@ -30,13 +32,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     days_ahead = entry.data[CONF_DAYS_AHEAD]
     max_events = entry.data[CONF_MAX_EVENTS]
 
+    # scan-interval uit opties (GUI), terugvallen op default
+    scan_minutes = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+
     coordinator = AgendaCoordinator(
         hass=hass,
         name=f"Agenda {calendar_entity}",
         calendar_entity=calendar_entity,
         days_ahead=days_ahead,
         max_events=max_events,
-        update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES),
+        update_interval=timedelta(minutes=scan_minutes),
     )
 
     await coordinator.async_config_entry_first_refresh()
