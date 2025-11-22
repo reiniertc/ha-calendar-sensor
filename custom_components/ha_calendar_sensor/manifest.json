@@ -1,7 +1,7 @@
 {
   "domain": "ha_calendar_sensor",
   "name": "HA Calendar Sensor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "documentation": "https://github.com/reiniertc/ha-calendar-sensor",
   "requirements": [],
   "codeowners": ["@reiniertc"],
