@@ -43,7 +43,6 @@ async def async_setup_entry(
 
     add_entities(entities)
 
-
 class AgendaDaySensor(CoordinatorEntity, SensorEntity):
     """One sensor per day with event_0..event_N attributes."""
 
@@ -77,6 +76,11 @@ class AgendaDaySensor(CoordinatorEntity, SensorEntity):
 
         # Unique id moet uniek zijn per kalender + dag
         self._attr_unique_id = f"ha-calendar-sensor-{slug}-day-{day_index}"
+
+    @property
+    def available(self) -> bool:
+        """Maak de sensor altijd beschikbaar, ook als de coordinator een fout had."""
+        return True
 
     @property
     def native_value(self) -> int:
