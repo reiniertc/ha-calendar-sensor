@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Dict, List, Optional
 import logging
 
 import async_timeout
@@ -17,14 +17,14 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class AgendaEvent:
-    start: str
-    end: str
+    start: datetime
+    end: Optional[datetime]
     summary: str
-    description: str | None
+    description: Optional[str]
 
 
-class AgendaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Coordinator die agenda-events ophaalt en vlakke data voor de sensor aanlevert."""
+class AgendaCoordinator(DataUpdateCoordinator[Dict[int, List[AgendaEvent]]]):
+    """Coordinator die agenda-events ophaalt, per dag indeelt en aan de sensors levert."""
 
     def __init__(
         self,
@@ -53,13 +53,13 @@ class AgendaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def max_events(self) -> int:
         return self._max_events
 
-    async def _async_update_data(self) -> dict[str, Any]:
+    async def _async_update_data(self) -> Dict[int, List[AgendaEvent]]:
+        """Haal events op en groepeer per dag-index."""
         now = dt_util.now()
         tz = now.tzinfo
         today = now.date()
 
-        payload: dict[str, Any] = {}
-        total_today = 0
+        events_by_day: Dict[int, List[AgendaEvent]] = {}
 
         async with async_timeout.timeout(30):
             for day_index in range(self._days_ahead):
@@ -83,33 +83,57 @@ class AgendaCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 calendar_data = response.get(self._calendar_entity, {})
                 raw_events = calendar_data.get("events", [])
 
-                events = raw_events[: self._max_events]
+                day_events: List[AgendaEvent] = []
 
-                if day_index == 0:
-                    total_today = len(events)
+                for ev in raw_events[: self._max_events]:
+                    start_raw = ev.get("start")
+                    end_raw = ev.get("end")
 
-                for event_index, ev in enumerate(events):
-                    evt = AgendaEvent(
-                        start=ev.get("start", ""),
-                        end=ev.get("end", ""),
-                        summary=ev.get("summary", ""),
-                        description=ev.get("description"),
+                    start = self._parse_datetime_like(start_raw, tz)
+                    if start is None:
+                        # Als start niet parsebaar is, sla dit event over
+                        continue
+
+                    end = self._parse_datetime_like(end_raw, tz) if end_raw else None
+
+                    day_events.append(
+                        AgendaEvent(
+                            start=start,
+                            end=end,
+                            summary=ev.get("summary") or "",
+                            description=ev.get("description"),
+                        )
                     )
 
-                    prefix = f"event_{day_index}_{event_index}"
-                    payload[f"{prefix}_start"] = evt.start
-                    payload[f"{prefix}_end"] = evt.end
-                    payload[f"{prefix}_summary"] = evt.summary
-                    payload[f"{prefix}_description"] = evt.description or ""
-
-        payload["count_today"] = total_today
-        payload["last_refresh"] = dt_util.utcnow().isoformat()
+                events_by_day[day_index] = day_events
 
         _LOGGER.debug(
-            "AgendaCoordinator update %s: count_today=%s, keys=%s",
+            "AgendaCoordinator update %s: %s",
             self._calendar_entity,
-            total_today,
-            list(payload.keys()),
+            {k: len(v) for k, v in events_by_day.items()},
         )
 
-        return payload
+        return events_by_day
+
+    @staticmethod
+    def _parse_datetime_like(
+        value: Optional[str],
+        tz,
+    ) -> Optional[datetime]:
+        """Probeer een string als datetime of date te parsen en timezone toe te voegen."""
+        if not value:
+            return None
+
+        # Probeer eerst volledige datetime
+        dt = dt_util.parse_datetime(value)
+        if dt is not None:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=tz)
+            return dt
+
+        # Anders als date
+        date = dt_util.parse_date(value)
+        if date is not None:
+            return datetime.combine(date, datetime.min.time()).replace(tzinfo=tz)
+
+        return None
